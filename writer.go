@@ -7,30 +7,38 @@ import (
 	"time"
 )
 
-type writer struct {
+type Writer struct {
 	w    io.Writer
 	size int
 
 	m  sync.Mutex
 	b  bytes.Buffer
 	ts time.Time
+
+	onError func(error)
 }
 
 // New creates a new buffered writer that implements io.Write.
 // The writer accumulates input data in a buffer with size of size,
 // until it is filled up or delayFlush time is pass, and then writes to
 // underlying writer w.
-func New(size int, delayFlush time.Duration, w io.Writer) *writer {
-	wr := &writer{w: w, size: size}
+func New(size int, delayFlush time.Duration, w io.Writer) *Writer {
+	wr := &Writer{w: w, size: size}
 	go wr.flusher(delayFlush)
 	return wr
 }
 
+// OnError sets the handler function that will be called if a error
+// occurs while write to the underlying writer.
+func (w *Writer) OnError(handler func(error)) {
+	w.onError = handler
+}
+
 // Write writes data to the internal buffer.
 // It actually does not return any error because writing to the underlying
-// writer commonly happens asynchronously.
-func (w *writer) Write(data []byte) (int, error) {
-	if len(data) < 1 {
+// writer most of the time happens asynchronously; see OnError method.
+func (w *Writer) Write(data []byte) (int, error) {
+	if len(data) == 0 {
 		return 0, nil
 	}
 
@@ -47,15 +55,18 @@ func (w *writer) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (w *writer) flush() {
+func (w *Writer) flush() {
 	// w.m must be locked here
 	if w.b.Len() > 0 {
-		w.w.Write(w.b.Bytes())
+		_, err := w.w.Write(w.b.Bytes())
+		if err != nil && w.onError != nil {
+			w.onError(err)
+		}
 		w.b.Reset()
 	}
 }
 
-func (w *writer) flusher(delay time.Duration) {
+func (w *Writer) flusher(delay time.Duration) {
 	for {
 		w.m.Lock()
 

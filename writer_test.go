@@ -21,7 +21,7 @@ func TestWriter(t *testing.T) {
 	// There is not enough free space in the internal buffer, should flush here
 	assert.Equal(t, []byte("MessageAMessageB"), b.Bytes())
 
-	// Should flust the rest part after the specified delay
+	// Should flush the rest part after the specified delay
 	b.Reset()
 	time.Sleep(200 * time.Millisecond)
 	assert.Equal(t, []byte("MessageC"), b.Bytes())
